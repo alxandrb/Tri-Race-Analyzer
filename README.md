@@ -12,7 +12,7 @@
 ![Modules](https://img.shields.io/badge/ES-MODULES-d4a854?style=flat-square&labelColor=050403)
 ![Deps](https://img.shields.io/badge/RUNTIME%20DEPS-0-d4a854?style=flat-square&labelColor=050403)
 ![Pages](https://img.shields.io/badge/DEPLOY-GITHUB%20PAGES-d4a854?style=flat-square&labelColor=050403)
-![License](https://img.shields.io/badge/LICENSE-MIT-d4a854?style=flat-square&labelColor=050403)
+![License](https://img.shields.io/badge/LICENSE-PROPRIETARY-d44a2c?style=flat-square&labelColor=050403)
 
 > Analyseur GPX physique au look HUD/Weyland-Yutani. Lit un fichier de course
 > (idéalement vélo, avec capteurs de puissance/cadence) et produit des stats
@@ -189,9 +189,18 @@ P·η  =  v · ( ½·ρ·CdA·v_rel·|v_rel|  +  m·g·(Crr·cosθ + sinθ) )
 
 ## ▎ LICENSE
 
-```
-MIT — fais-en ce que tu veux.
-```
+> [!CAUTION]
+> **Tous droits réservés** — Copyright © 2026 Alexandre Bordereau.
+>
+> Ce code est rendu publiquement visible **à titre de consultation et de
+> référence personnelle uniquement**. Aucune partie de ce projet (code source,
+> assets, design, mise en page, documentation) ne peut être copiée, modifiée,
+> redistribuée ou utilisée — à des fins commerciales ou non — **sans
+> autorisation écrite préalable** de l'auteur.
+>
+> Demandes de licence : alex.bordereau@gmail.com
+>
+> Voir le fichier [LICENSE](LICENSE) pour les conditions complètes.
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════╗

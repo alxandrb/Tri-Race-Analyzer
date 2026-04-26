@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPX TELEMETRY · ANALYZER</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:           #050403;
+    --bg-2:         #08070a;
+    --panel:        #0c0a06;
+    --panel-2:      #110d08;
+    --border:       #2a2114;
+    --border-bright:#4a3a1f;
+    --accent:       #d4a854;
+    --accent-bright:#f5d278;
+    --accent-dim:   #8a6f30;
+    --accent-soft:  rgba(212,168,84,0.15);
+    --text:         #d4c79e;
+    --text-dim:     #8a7e5d;
+    --text-mute:    #5a4f37;
+    --warn:         #e87a3c;
+    --bad:          #d44a2c;
+    --good:         #c8b074;
+    --font-mono:    "Share Tech Mono", "JetBrains Mono", "SF Mono", Consolas, monospace;
+    --font-display: "Orbitron", "Eurostile", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-mono);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    background-image:
+      radial-gradient(ellipse at top, rgba(212,168,84,0.04) 0%, transparent 60%),
+      linear-gradient(180deg, transparent 0%, transparent 100%);
+  }
+  header {
+    padding: 0.85rem 1.25rem;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border-bright);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    position: relative;
+  }
+  header::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: -3px;
+    height: 1px;
+    background: var(--accent-dim);
+    opacity: 0.4;
+  }
+  header h1 {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+  header h1::before {
+    content: "[ A ]";
+    color: var(--accent-bright);
+    font-size: 0.85rem;
+    border: 1px solid var(--accent-dim);
+    padding: 0.15rem 0.4rem;
+    letter-spacing: 0.1em;
+  }
+  header h1 span {
+    color: var(--text-dim);
+    font-weight: 400;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-transform: none;
+  }
+  .params { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+  .params label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    display: flex; align-items: center; gap: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+  }
+  .num-input {
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    color: var(--accent-bright);
+    padding: 0.3rem 0.5rem;
+    border-radius: 0;
+    width: 70px;
+    font-size: 0.95rem;
+    font-family: var(--font-mono);
+  }
+  .num-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .file-controls { display: flex; gap: 0.5rem; align-items: center; }
+  .file-controls label {
+    background: transparent;
+    border: 1px solid var(--accent-dim);
+    color: var(--accent);
+    padding: 0.4rem 1rem;
+    border-radius: 0;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    transition: all 0.15s;
+  }
+  .file-controls label:hover { background: var(--accent); color: var(--bg); }
+  .file-controls input { display: none; }
+
+  main { padding: 1.5rem; max-width: 1400px; margin: 0 auto; }
+  .empty { text-align: center; padding: 4rem 2rem; color: var(--text-dim); }
+  .loading {
+    text-align: center; padding: 2rem; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.3em; font-size: 0.85rem;
+  }
+  .err {
+    background: rgba(212,74,44,0.1);
+    border: 1px solid var(--bad);
+    color: var(--text);
+    padding: 1rem;
+    border-radius: 0;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+  }
+
+  .tabs {
+    display: flex; gap: 0;
+    border-bottom: 1px solid var(--border-bright);
+    margin-bottom: 1.5rem;
+  }
+  .tab-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: none;
+    color: var(--text-dim);
+    padding: 0.65rem 1.5rem;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    margin-bottom: -1px;
+    position: relative;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active {
+    color: var(--accent-bright);
+    border-color: var(--border-bright);
+    background: var(--panel);
+  }
+  .tab-btn.active::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: -1px;
+    height: 1px;
+    background: var(--panel);
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 0.5rem; margin-bottom: 1.25rem; }
+  .stat {
+    background: var(--panel);
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: visible;
+  }
+  .stat::before, .stat::after {
+    content: "";
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    pointer-events: none;
+  }
+  .stat::before {
+    top: -1px; left: -1px;
+    border-top: 1px solid var(--accent);
+    border-left: 1px solid var(--accent);
+  }
+  .stat::after {
+    bottom: -1px; right: -1px;
+    border-bottom: 1px solid var(--accent);
+    border-right: 1px solid var(--accent);
+  }
+  .stat .label {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    letter-spacing: 0.2em;
+    margin-bottom: 0.3rem;
+  }
+  .stat .value {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 500;
+    color: var(--accent-bright);
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+  }
+  .stat .unit {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-left: 0.3rem;
+    font-weight: 400;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--accent);
+    margin: 1.5rem 0 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    padding-left: 1rem;
+    position: relative;
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+  .section-title::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 50%;
+    transform: translateY(-50%);
+    width: 4px; height: 70%;
+    background: var(--accent);
+  }
+  .section-title::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border-bright);
+    margin-left: 0.5rem;
+  }
+
+  #map {
+    height: 480px;
+    border: 1px solid var(--border-bright);
+    margin-bottom: 1rem;
+    filter: contrast(0.9) brightness(0.85) sepia(0.15);
+    position: relative;
+  }
+
+  .charts { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+  .chart-card, .zones-card {
+    background: var(--panel);
+    padding: 1rem;
+    border: 1px solid var(--border);
+    position: relative;
+    margin-bottom: 0;
+  }
+  .chart-card::before, .chart-card::after,
+  .zones-card::before, .zones-card::after,
+  .hover-info::before, .hover-info::after,
+  .legend::before, .legend::after {
+    content: "";
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    pointer-events: none;
+  }
+  .chart-card::before, .zones-card::before, .hover-info::before, .legend::before {
+    top: -1px; left: -1px;
+    border-top: 1px solid var(--accent);
+    border-left: 1px solid var(--accent);
+  }
+  .chart-card::after, .zones-card::after, .hover-info::after, .legend::after {
+    bottom: -1px; right: -1px;
+    border-bottom: 1px solid var(--accent);
+    border-right: 1px solid var(--accent);
+  }
+  .chart-card h2, .zones-card h2 {
+    font-size: 0.7rem;
+    font-weight: 500;
+    margin-bottom: 0.75rem;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    font-family: var(--font-mono);
+    padding-bottom: 0.5rem;
+    border-bottom: 1px dashed var(--border-bright);
+  }
+  .chart-wrap { position: relative; height: 220px; }
+  .zones-card { margin-bottom: 0.75rem; }
+
+  .zone-bar {
+    display: flex;
+    height: 18px;
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--border);
+  }
+  .zone-bar > span { display: block; height: 100%; }
+  .zone-table, .mmp-table, .sens-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+  }
+  .zone-table th, .zone-table td,
+  .mmp-table th, .mmp-table td,
+  .sens-table th, .sens-table td {
+    padding: 0.4rem 0.5rem;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+  }
+  .zone-table th, .mmp-table th, .sens-table th {
+    color: var(--text-dim); font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.15em;
+    font-size: 0.65rem;
+    text-align: right;
+  }
+  .zone-table td, .mmp-table td, .sens-table td { color: var(--text); }
+  .zone-table td:first-child, .zone-table th:first-child,
+  .mmp-table td:first-child, .mmp-table th:first-child,
+  .sens-table td:first-child, .sens-table th:first-child {
+    text-align: left;
+  }
+  .zone-swatch {
+    display: inline-block; width: 10px; height: 10px;
+    margin-right: 0.5rem; vertical-align: middle;
+    border: 1px solid rgba(0,0,0,0.3);
+  }
+  .sens-table .pos { color: var(--bad); }
+  .sens-table .neg { color: var(--good); }
+
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.5rem; margin-bottom: 1.5rem; }
+  .form-field {
+    background: var(--panel);
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    position: relative;
+  }
+  .form-field::before, .form-field::after {
+    content: ""; position: absolute;
+    width: 6px; height: 6px;
+    pointer-events: none;
+  }
+  .form-field::before {
+    top: -1px; left: -1px;
+    border-top: 1px solid var(--accent-dim);
+    border-left: 1px solid var(--accent-dim);
+  }
+  .form-field::after {
+    bottom: -1px; right: -1px;
+    border-bottom: 1px solid var(--accent-dim);
+    border-right: 1px solid var(--accent-dim);
+  }
+  .form-field label {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    letter-spacing: 0.2em;
+    display: block;
+    margin-bottom: 0.4rem;
+    font-weight: 400;
+  }
+  .form-field input {
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    color: var(--accent-bright);
+    padding: 0.4rem 0.6rem;
+    border-radius: 0;
+    width: 100%;
+    font-size: 1rem;
+    font-family: var(--font-mono);
+  }
+  .form-field input:focus { outline: none; border-color: var(--accent); }
+  .form-field .hint {
+    font-size: 0.6rem;
+    color: var(--text-mute);
+    margin-top: 0.35rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .pred-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem; margin-bottom: 1.5rem; }
+  .pred-summary .stat .delta { font-size: 0.7rem; margin-top: 0.3rem; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }
+  .pred-summary .stat .delta.faster { color: var(--good); }
+  .pred-summary .stat .delta.slower { color: var(--bad); }
+
+  .map-controls {
+    display: flex; gap: 1rem; align-items: center;
+    flex-wrap: wrap; margin-bottom: 0.5rem;
+  }
+  .map-controls label {
+    font-size: 0.7rem; color: var(--text-dim);
+    display: flex; gap: 0.5rem; align-items: center;
+    text-transform: uppercase; letter-spacing: 0.2em;
+  }
+  .map-controls select {
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    color: var(--accent);
+    padding: 0.3rem 0.5rem;
+    border-radius: 0;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .map-controls select:focus { outline: none; border-color: var(--accent); }
+  .map-controls select option { background: var(--panel); color: var(--text); }
+
+  .legend {
+    background: var(--panel);
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--border);
+    margin-top: 0.5rem;
+    margin-bottom: 1rem;
+    position: relative;
+  }
+  .legend-title {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
+  .legend-bar {
+    display: flex; height: 12px;
+    margin-bottom: 0.4rem;
+    border: 1px solid var(--border);
+  }
+  .legend-bar > span { flex: 1; }
+  .legend-labels {
+    display: flex; justify-content: space-between;
+    font-size: 0.75rem; color: var(--text);
+    font-family: var(--font-mono);
+  }
+
+  .hover-info {
+    background: var(--panel);
+    padding: 0.95rem 1rem;
+    border: 1px solid var(--border);
+    margin-bottom: 1.5rem;
+    min-height: 80px;
+    position: relative;
+  }
+  .hover-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+    gap: 0.6rem 1rem;
+  }
+  .hover-grid .hl {
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
+  .hover-grid .hv {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: var(--accent-bright);
+    line-height: 1.2;
+    letter-spacing: 0.04em;
+    margin-top: 0.15rem;
+  }
+  .hover-grid .hv .unit {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    margin-left: 0.25rem;
+    font-weight: 400;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+  }
+  .hover-empty {
+    color: var(--text-mute);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
+  .leaflet-container { cursor: crosshair; background: var(--bg-2); }
+  .leaflet-container .leaflet-control-attribution {
+    background: rgba(12,10,6,0.8); color: var(--text-mute);
+    font-family: var(--font-mono); font-size: 9px;
+    border: 1px solid var(--border);
+  }
+  .leaflet-container .leaflet-control-attribution a { color: var(--accent-dim); }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+    background: var(--panel); color: var(--accent);
+    border: 1px solid var(--accent-dim);
+    border-radius: 0;
+    font-family: var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.15em;
+    font-size: 0.75rem;
+  }
+  .leaflet-popup-content { margin: 8px 12px; }
+
+  ::selection { background: var(--accent); color: var(--bg); }
+
+  @media (min-width: 1024px) {
+    .charts { grid-template-columns: 1fr 1fr; }
+    .power-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>GPX Telemetry <span id="trackName"></span></h1>
+  <div class="params">
+    <label>FTP <input type="number" class="num-input" id="ftpInput" min="50" max="600" step="1"></label>
+    <label>Poids <input type="number" class="num-input" id="weightInput" min="30" max="200" step="0.1" placeholder="kg"></label>
+  </div>
+  <div class="file-controls">
+    <label for="fileInput">Charger un .gpx</label>
+    <input type="file" id="fileInput" accept=".gpx,application/gpx+xml">
+  </div>
+</header>
+<main id="main">
+  <div class="loading" id="loading">[ INITIALISATION · LECTURE GPX ]</div>
+</main>
+
+<script>
+const R_EARTH = 6371000;
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return 2 * R_EARTH * Math.asin(Math.sqrt(a));
+}
+
+function parseGPX(xmlText) {
+  const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+  const errNode = doc.querySelector("parsererror");
+  if (errNode) throw new Error("GPX invalide");
+  const name = doc.querySelector("trk > name")?.textContent ?? "Trace";
+  const trkpts = [...doc.querySelectorAll("trkpt")];
+  if (!trkpts.length) throw new Error("Aucun point dans la trace");
+
+  const points = trkpts.map(pt => {
+    const lat = parseFloat(pt.getAttribute("lat"));
+    const lon = parseFloat(pt.getAttribute("lon"));
+    const ele = parseFloat(pt.querySelector("ele")?.textContent ?? "NaN");
+    const timeStr = pt.querySelector("time")?.textContent;
+    const time = timeStr ? new Date(timeStr) : null;
+    const cad = parseFloat(pt.getElementsByTagNameNS("*", "cad")[0]?.textContent ?? "NaN");
+    const temp = parseFloat(pt.getElementsByTagNameNS("*", "atemp")[0]?.textContent ?? "NaN");
+    const hr = parseFloat(pt.getElementsByTagNameNS("*", "hr")[0]?.textContent ?? "NaN");
+    const powerEl = pt.querySelector("extensions > power") ?? pt.getElementsByTagNameNS("*", "power")[0];
+    const power = parseFloat(powerEl?.textContent ?? "NaN");
+    return { lat, lon, ele, time, cad, temp, hr, power };
+  });
+
+  let cumDist = 0;
+  let elevGain = 0, elevLoss = 0;
+  let maxSpeed = 0;
+  const enriched = [];
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    if (i === 0) {
+      enriched.push({ ...p, dist: 0, speed: 0 });
+      continue;
+    }
+    const prev = points[i-1];
+    const d = haversine(prev.lat, prev.lon, p.lat, p.lon);
+    cumDist += d;
+    let speed = 0;
+    if (p.time && prev.time) {
+      const dt = (p.time - prev.time) / 1000;
+      if (dt > 0) speed = (d / dt) * 3.6;
+    }
+    if (Number.isFinite(p.ele) && Number.isFinite(prev.ele)) {
+      const de = p.ele - prev.ele;
+      if (de > 0) elevGain += de; else elevLoss += -de;
+    }
+    if (speed > maxSpeed && speed < 120) maxSpeed = speed;
+    enriched.push({ ...p, dist: cumDist, speed });
+  }
+
+  const start = enriched[0].time;
+  const end = enriched[enriched.length-1].time;
+  const durationSec = (start && end) ? (end - start) / 1000 : 0;
+
+  const movingPoints = enriched.filter(p => p.speed > 1);
+  const avgSpeed = movingPoints.length
+    ? movingPoints.reduce((s,p) => s + p.speed, 0) / movingPoints.length
+    : 0;
+
+  const cads = enriched.map(p => p.cad).filter(v => Number.isFinite(v) && v > 0);
+  const avgCad = cads.length ? cads.reduce((s,v) => s + v, 0) / cads.length : null;
+  const maxCad = cads.length ? Math.max(...cads) : null;
+
+  const temps = enriched.map(p => p.temp).filter(v => Number.isFinite(v));
+  const avgTemp = temps.length ? temps.reduce((s,v) => s + v, 0) / temps.length : null;
+
+  const eles = enriched.map(p => p.ele).filter(v => Number.isFinite(v));
+  const minEle = eles.length ? Math.min(...eles) : null;
+  const maxEle = eles.length ? Math.max(...eles) : null;
+
+  const powers = enriched.map(p => p.power).filter(v => Number.isFinite(v));
+  const hasPower = powers.length > 0;
+  const avgPower = hasPower ? powers.reduce((s,v) => s + v, 0) / powers.length : null;
+  const movingPowers = enriched.filter(p => Number.isFinite(p.power) && p.speed > 1).map(p => p.power);
+  const avgPowerMoving = movingPowers.length ? movingPowers.reduce((s,v) => s + v, 0) / movingPowers.length : null;
+  const maxPower = hasPower ? Math.max(...powers) : null;
+  const normalizedPower = hasPower ? computeNP(enriched) : null;
+  const variabilityIndex = (normalizedPower && avgPowerMoving) ? normalizedPower / avgPowerMoving : null;
+  const totalKJ = computeKJ(enriched);
+
+  return {
+    name, points: enriched,
+    stats: {
+      distance: cumDist / 1000,
+      duration: durationSec,
+      avgSpeed, maxSpeed,
+      elevGain, elevLoss,
+      avgCad, maxCad,
+      avgTemp, minEle, maxEle,
+      hasPower, avgPower, avgPowerMoving, maxPower, normalizedPower, variabilityIndex, totalKJ,
+      startTime: start, endTime: end,
+      pointCount: enriched.length,
+    },
+  };
+}
+
+function computeNP(points) {
+  // Normalized Power: rolling 30s avg, ^4, mean, ^(1/4). Requires timestamps.
+  const series = points.filter(p => p.time && Number.isFinite(p.power));
+  if (series.length < 30) return null;
+  const window = 30000; // 30s in ms
+  const rolling = [];
+  let head = 0;
+  let sum = 0, count = 0;
+  // Use a deque-like sliding window indexed by time
+  for (let i = 0; i < series.length; i++) {
+    sum += series[i].power; count++;
+    while (series[i].time - series[head].time > window) {
+      sum -= series[head].power; count--; head++;
+    }
+    if (series[i].time - series[0].time >= window) {
+      rolling.push(sum / count);
+    }
+  }
+  if (!rolling.length) return null;
+  const fourthMean = rolling.reduce((s,v) => s + Math.pow(v, 4), 0) / rolling.length;
+  return Math.pow(fourthMean, 0.25);
+}
+
+const POWER_ZONES = [
+  { key: "Z1", name: "Z1 Récupération",   lo: 0,    hi: 0.55, color: "#6b5d3f" },
+  { key: "Z2", name: "Z2 Endurance",      lo: 0.55, hi: 0.75, color: "#7a8fa8" },
+  { key: "Z3", name: "Z3 Tempo",          lo: 0.75, hi: 0.90, color: "#9bba6b" },
+  { key: "Z4", name: "Z4 Seuil",          lo: 0.90, hi: 1.05, color: "#d4a854" },
+  { key: "Z5", name: "Z5 VO2max",         lo: 1.05, hi: 1.20, color: "#e87a3c" },
+  { key: "Z6", name: "Z6 Anaérobie",      lo: 1.20, hi: 1.50, color: "#d44a2c" },
+  { key: "Z7", name: "Z7 Neuromusculaire",lo: 1.50, hi: Infinity, color: "#a855f7" },
+];
+
+const MMP_DURATIONS = [5, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600];
+
+function computePowerZones(points, ftp) {
+  const buckets = POWER_ZONES.map(z => ({ ...z, lowW: z.lo * ftp, highW: z.hi * ftp, seconds: 0 }));
+  for (let i = 1; i < points.length; i++) {
+    const p = points[i], prev = points[i-1];
+    if (!Number.isFinite(p.power) || !p.time || !prev.time) continue;
+    const dt = (p.time - prev.time) / 1000;
+    if (!(dt > 0 && dt < 60)) continue;
+    const w = p.power;
+    const z = buckets.find(b => w >= b.lowW && w < b.highW) ?? buckets[buckets.length - 1];
+    z.seconds += dt;
+  }
+  return buckets;
+}
+
+function computeMMP(points, durations) {
+  // Build a uniformly-sampled (per-second) power array using time-weighted interpolation,
+  // then for each window run a sliding-sum max.
+  const series = points.filter(p => p.time && Number.isFinite(p.power));
+  if (series.length < 2) return durations.map(d => ({ duration: d, watts: null }));
+  const t0 = series[0].time.getTime();
+  const tEnd = series[series.length - 1].time.getTime();
+  const N = Math.floor((tEnd - t0) / 1000) + 1;
+  const arr = new Float32Array(N);
+  let j = 0;
+  for (let i = 0; i < N; i++) {
+    const t = t0 + i * 1000;
+    while (j + 1 < series.length && series[j+1].time.getTime() <= t) j++;
+    arr[i] = series[j].power;
+  }
+  return durations.map(dur => {
+    if (N < dur) return { duration: dur, watts: null };
+    let sum = 0;
+    for (let i = 0; i < dur; i++) sum += arr[i];
+    let best = sum;
+    for (let i = dur; i < N; i++) {
+      sum += arr[i] - arr[i - dur];
+      if (sum > best) best = sum;
+    }
+    return { duration: dur, watts: best / dur };
+  });
+}
+
+function buildSegments(points, segmentMeters) {
+  // Aggregate trackpoints into ~segmentMeters chunks. Reduces GPS elevation noise.
+  const segs = [];
+  let segStart = 0;
+  for (let i = 1; i < points.length; i++) {
+    const isLast = i === points.length - 1;
+    if (points[i].dist - points[segStart].dist >= segmentMeters || isLast) {
+      const dDist = points[i].dist - points[segStart].dist;
+      if (dDist <= 0) { segStart = i; continue; }
+      const dEle = (points[i].ele ?? 0) - (points[segStart].ele ?? 0);
+      const slope = dEle / dDist;
+      let actualTime = null;
+      if (points[i].time && points[segStart].time) {
+        actualTime = (points[i].time - points[segStart].time) / 1000;
+      }
+      segs.push({
+        startDist: points[segStart].dist,
+        endDist: points[i].dist,
+        length: dDist,
+        slope,
+        actualTime,
+      });
+      segStart = i;
+    }
+  }
+  return segs;
+}
+
+function solveSpeed(power, mass, cda, crr, rho, slope, wind, eff) {
+  // Solves: power*eff = v * (0.5*rho*cda*(v+wind)*|v+wind| + mass*g*(crr*cos(θ) + sin(θ)))
+  // wind: m/s, positive = headwind. Returns v in m/s.
+  // Uses bisection — robust on steep descents where Newton diverges.
+  const peff = power * eff;
+  const denom = Math.sqrt(1 + slope * slope);
+  const sinT = slope / denom;
+  const cosT = 1 / denom;
+  const grav = mass * 9.81 * (crr * cosT + sinT);
+  const f = (v) => {
+    const vRel = v + wind;
+    const drag = 0.5 * rho * cda * vRel * Math.abs(vRel);
+    return v * (drag + grav) - peff;
+  };
+  let lo = 0.1, hi = 30; // m/s search range (~0.4 to 108 km/h)
+  if (f(lo) > 0) return lo;
+  if (f(hi) < 0) return hi;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (f(mid) < 0) lo = mid; else hi = mid;
+    if (hi - lo < 0.005) break;
+  }
+  return (lo + hi) / 2;
+}
+
+function predictRace(points, params) {
+  const segs = buildSegments(points, 100);
+  const m = params.riderWeight + params.bikeWeight;
+  const windMs = (params.wind || 0) / 3.6;
+  let totalTime = 0;
+  let actualTotal = 0;
+  const series = [];
+  for (const seg of segs) {
+    const v = solveSpeed(params.power, m, params.cda, params.crr, params.rho, seg.slope, windMs, params.efficiency);
+    const t = seg.length / v;
+    totalTime += t;
+    if (seg.actualTime != null) actualTotal += seg.actualTime;
+    series.push({
+      dist: (seg.startDist + seg.endDist) / 2 / 1000,
+      predSpeed: v * 3.6,
+      actualSpeed: seg.actualTime ? (seg.length / seg.actualTime) * 3.6 : null,
+      slopePct: seg.slope * 100,
+    });
+  }
+  const totalDist = segs.length ? segs[segs.length - 1].endDist : 0;
+  return {
+    totalTime,
+    actualTotal: actualTotal || null,
+    totalDist,
+    series,
+    avgSpeed: totalTime > 0 ? (totalDist / totalTime) * 3.6 : 0,
+  };
+}
+
+const TILE_LAYERS = {
+  osm:       { name: "OpenStreetMap", url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "© OpenStreetMap", maxZoom: 19, subdomains: "abc" },
+  topo:      { name: "OpenTopoMap",   url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",   attribution: "© OpenStreetMap, SRTM, © OpenTopoMap (CC-BY-SA)", maxZoom: 17, subdomains: "abc" },
+  satellite: { name: "Satellite",     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attribution: "© Esri World Imagery", maxZoom: 19 },
+  cartoDark: { name: "Sombre",        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", attribution: "© OSM, © CARTO", maxZoom: 19, subdomains: "abcd" },
+};
+
+const COLOR_MODES = [
+  { id: "none",      label: "Uniforme",  unit: "" },
+  { id: "speed",     label: "Vitesse",   unit: "km/h" },
+  { id: "elevation", label: "Élévation", unit: "m" },
+  { id: "gradient",  label: "Pente",     unit: "%" },
+  { id: "power",     label: "Puissance", unit: "W",   needs: "power" },
+  { id: "cadence",   label: "Cadence",   unit: "rpm", needs: "cadence" },
+];
+
+function colorRamp(t) {
+  // Blue → cyan → green → yellow → red (HSL 240 → 0)
+  const x = Math.max(0, Math.min(1, t));
+  const hue = 240 - x * 240;
+  return `hsl(${hue.toFixed(0)}, 90%, 50%)`;
+}
+
+function computeGradients(points, smoothMeters) {
+  // Centered window slope around each point, in percent.
+  const out = new Array(points.length);
+  let lo = 0, hi = 0;
+  for (let i = 0; i < points.length; i++) {
+    while (lo < i && points[i].dist - points[lo].dist > smoothMeters / 2) lo++;
+    hi = Math.max(i, hi);
+    while (hi < points.length - 1 && points[hi].dist - points[i].dist < smoothMeters / 2) hi++;
+    const dDist = points[hi].dist - points[lo].dist;
+    out[i] = dDist > 0 ? ((points[hi].ele ?? 0) - (points[lo].ele ?? 0)) / dDist * 100 : 0;
+  }
+  return out;
+}
+
+function metricValues(points, mode) {
+  switch (mode) {
+    case "speed":     return points.map(p => p.speed);
+    case "power":     return points.map(p => p.power);
+    case "elevation": return points.map(p => p.ele);
+    case "cadence":   return points.map(p => p.cad);
+    case "gradient":  return computeGradients(points, 100);
+    default:          return null;
+  }
+}
+
+function percentile(sorted, p) {
+  if (!sorted.length) return null;
+  const idx = Math.max(0, Math.min(sorted.length - 1, Math.floor(sorted.length * p)));
+  return sorted[idx];
+}
+
+function airDensity(tempC, altitudeM) {
+  // ISA approximation: rho = P/(Rd*T), P decreases with altitude
+  const T = tempC + 273.15;
+  const P = 101325 * Math.pow(1 - 0.0065 * altitudeM / 288.15, 5.255);
+  return P / (287.05 * T);
+}
+
+function fmtMMPDuration(sec) {
+  if (sec < 60) return `${sec} s`;
+  if (sec < 3600) return `${sec / 60} min`;
+  return `${sec / 3600} h`;
+}
+
+function computeKJ(points) {
+  // Total work: sum of power * dt, in kilojoules
+  let joules = 0;
+  for (let i = 1; i < points.length; i++) {
+    const p = points[i], prev = points[i-1];
+    if (!Number.isFinite(p.power) || !p.time || !prev.time) continue;
+    const dt = (p.time - prev.time) / 1000;
+    if (dt > 0 && dt < 60) joules += p.power * dt;
+  }
+  return joules / 1000;
+}
+
+function fmtDuration(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  return `${h}h${String(m).padStart(2,"0")}m${String(s).padStart(2,"0")}`;
+}
+
+function fmtPace(speedKmh) {
+  if (!speedKmh) return "—";
+  const minPerKm = 60 / speedKmh;
+  const m = Math.floor(minPerKm);
+  const s = Math.round((minPerKm - m) * 60);
+  return `${m}:${String(s).padStart(2,"0")}/km`;
+}
+
+function smoothByTime(points, key, windowSec) {
+  const out = [];
+  let head = 0, sum = 0, count = 0;
+  for (let i = 0; i < points.length; i++) {
+    const v = points[i][key];
+    if (Number.isFinite(v) && points[i].time) { sum += v; count++; }
+    while (head < i && points[head].time && points[i].time && (points[i].time - points[head].time) > windowSec * 1000) {
+      const hv = points[head][key];
+      if (Number.isFinite(hv) && points[head].time) { sum -= hv; count--; }
+      head++;
+    }
+    out.push({ ...points[i], smoothed: count ? sum / count : null });
+  }
+  return out;
+}
+
+function downsample(points, target = 800) {
+  if (points.length <= target) return points;
+  const step = points.length / target;
+  const out = [];
+  for (let i = 0; i < target; i++) out.push(points[Math.floor(i * step)]);
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+let map, trackLayer;
+const charts = {};
+let currentData = null;
+
+const DEFAULT_FTP = 285;
+function getFTP() {
+  const v = parseFloat(document.getElementById("ftpInput").value);
+  return Number.isFinite(v) && v > 0 ? v : DEFAULT_FTP;
+}
+function getWeight() {
+  const v = parseFloat(document.getElementById("weightInput").value);
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+let hoverMarker;
+let cachedGradients = null;
+
+function findNearestPointIdx(points, latlng) {
+  // Brute force on (lat,lon) squared. Fast enough for ~10k points per mousemove.
+  let bestIdx = 0, bestD = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const dLat = points[i].lat - latlng.lat;
+    const dLon = points[i].lon - latlng.lng;
+    const d = dLat * dLat + dLon * dLon;
+    if (d < bestD) { bestD = d; bestIdx = i; }
+  }
+  return bestIdx;
+}
+
+function showHoverPoint(data, idx) {
+  const p = data.points[idx];
+  if (!p) return;
+  if (!hoverMarker) {
+    hoverMarker = L.circleMarker([p.lat, p.lon], {
+      color: "#f5d278", fillColor: "#d4a854", fillOpacity: 1, radius: 7, weight: 2,
+    });
+  }
+  if (!hoverMarker._map) hoverMarker.addTo(map);
+  hoverMarker.setLatLng([p.lat, p.lon]);
+
+  const slope = cachedGradients ? cachedGradients[idx] : null;
+  const timeStr = p.time ? p.time.toLocaleTimeString("fr-CA") : "—";
+  const elapsed = (p.time && data.points[0].time) ? (p.time - data.points[0].time) / 1000 : null;
+  const fields = [
+    { l: "Distance",  v: `${(p.dist/1000).toFixed(2)}`, u: "km" },
+    { l: "Élévation", v: Number.isFinite(p.ele) ? `${Math.round(p.ele)}` : "—", u: "m" },
+    { l: "Pente",     v: slope != null ? `${slope >= 0 ? "+" : ""}${slope.toFixed(1)}` : "—", u: "%" },
+    { l: "Vitesse",   v: `${p.speed.toFixed(1)}`, u: "km/h" },
+    Number.isFinite(p.power) ? { l: "Puissance", v: `${p.power.toFixed(0)}`, u: "W" } : null,
+    Number.isFinite(p.cad) && p.cad > 0 ? { l: "Cadence", v: `${p.cad.toFixed(0)}`, u: "rpm" } : null,
+    Number.isFinite(p.hr) && p.hr > 0 ? { l: "FC", v: `${p.hr.toFixed(0)}`, u: "bpm" } : null,
+    Number.isFinite(p.temp) ? { l: "Temp.", v: `${p.temp.toFixed(0)}`, u: "°C" } : null,
+    elapsed != null ? { l: "Temps écoulé", v: fmtDuration(elapsed), u: "" } : null,
+    p.time ? { l: "Heure", v: timeStr, u: "" } : null,
+  ].filter(Boolean);
+
+  document.getElementById("hoverInfo").innerHTML = `
+    <div class="hover-grid">
+      ${fields.map(f => `<div><div class="hl">${f.l}</div><div class="hv">${f.v}${f.u ? `<span class="unit">${f.u}</span>` : ""}</div></div>`).join("")}
+    </div>
+  `;
+}
+
+function hideHoverPoint() {
+  if (hoverMarker && hoverMarker._map) map.removeLayer(hoverMarker);
+  document.getElementById("hoverInfo").innerHTML = `<span class="hover-empty">Survole la carte pour voir les détails au point survolé.</span>`;
+}
+
+function drawMapView(data) {
+  const colorMode = document.getElementById("colorMode")?.value || "none";
+  const tileId = document.getElementById("tileMode")?.value || "osm";
+  if (map) map.remove();
+  hoverMarker = null;
+  cachedGradients = computeGradients(data.points, 100);
+  map = L.map("map", { preferCanvas: true });
+  const t = TILE_LAYERS[tileId] || TILE_LAYERS.osm;
+  L.tileLayer(t.url, { attribution: t.attribution, maxZoom: t.maxZoom, subdomains: t.subdomains }).addTo(map);
+
+  const points = data.points;
+  const latlngs = points.map(p => [p.lat, p.lon]);
+
+  const values = metricValues(points, colorMode);
+  let lo = null, hi = null;
+  if (values) {
+    const valid = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (valid.length) {
+      lo = percentile(valid, 0.05);
+      hi = percentile(valid, 0.95);
+    }
+  }
+
+  if (!values || lo == null || hi == null || hi === lo) {
+    L.polyline(latlngs, { color: "#d4a854", weight: 4, opacity: 0.95 }).addTo(map);
+  } else {
+    // Group consecutive points by quantized color bucket to keep polyline count low.
+    const N_BUCKETS = 24;
+    const bucketOf = (v) => {
+      if (!Number.isFinite(v)) return -1;
+      const t = (v - lo) / (hi - lo);
+      return Math.max(0, Math.min(N_BUCKETS - 1, Math.floor(t * N_BUCKETS)));
+    };
+    let runStart = 0;
+    let runBucket = bucketOf(values[0]);
+    for (let i = 1; i <= points.length; i++) {
+      const b = i < points.length ? bucketOf(values[i]) : -2;
+      if (b !== runBucket || i === points.length) {
+        if (runBucket >= 0 && i - runStart >= 1) {
+          const color = colorRamp((runBucket + 0.5) / N_BUCKETS);
+          L.polyline(latlngs.slice(runStart, i + 1), { color, weight: 4, opacity: 0.95 }).addTo(map);
+        }
+        runStart = i;
+        runBucket = b;
+      }
+    }
+  }
+
+  L.circleMarker(latlngs[0], { color: "#f5d278", fillColor: "#f5d278", radius: 7, fillOpacity: 1, weight: 2 }).addTo(map).bindPopup("DÉPART");
+  L.circleMarker(latlngs[latlngs.length - 1], { color: "#e87a3c", fillColor: "#e87a3c", radius: 7, fillOpacity: 1, weight: 2 }).addTo(map).bindPopup("ARRIVÉE");
+  map.fitBounds(L.latLngBounds(latlngs), { padding: [20, 20] });
+
+  renderLegend(colorMode, lo, hi);
+
+  // Hover interaction: snap to nearest trackpoint, update info panel
+  let pendingFrame = null;
+  let lastIdx = -1;
+  map.on("mousemove", e => {
+    if (pendingFrame) return;
+    pendingFrame = requestAnimationFrame(() => {
+      pendingFrame = null;
+      const idx = findNearestPointIdx(data.points, e.latlng);
+      if (idx === lastIdx) return;
+      lastIdx = idx;
+      showHoverPoint(data, idx);
+    });
+  });
+  map.on("mouseout", () => {
+    lastIdx = -1;
+    hideHoverPoint();
+  });
+}
+
+function renderLegend(mode, lo, hi) {
+  const el = document.getElementById("mapLegend");
+  if (!el) return;
+  if (mode === "none" || lo == null || hi == null) { el.innerHTML = ""; return; }
+  const meta = COLOR_MODES.find(m => m.id === mode);
+  const stops = Array.from({ length: 12 }, (_, i) => i / 11);
+  const fmt = v => mode === "gradient" ? v.toFixed(1) : (Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1));
+  el.innerHTML = `
+    <div class="legend">
+      <div class="legend-title">${meta?.label ?? ""} ${meta?.unit ? `(${meta.unit})` : ""} — échelle ${fmt(lo)} → ${fmt(hi)} (5–95 %ile)</div>
+      <div class="legend-bar">${stops.map(s => `<span style="background:${colorRamp(s)}"></span>`).join("")}</div>
+      <div class="legend-labels">
+        <span>${fmt(lo)}</span>
+        <span>${fmt((lo + hi) / 2)}</span>
+        <span>${fmt(hi)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function ensureLayout() {
+  if (document.getElementById("tab-analyse")) return;
+  const main = document.getElementById("main");
+  main.innerHTML = `
+    <div class="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="analyse">Analyse</button>
+      <button class="tab-btn" data-tab="prediction">Prédiction</button>
+    </div>
+    <div id="tab-analyse" class="tab-content active"></div>
+    <div id="tab-prediction" class="tab-content">
+      <p style="color:var(--text-dim);margin-bottom:1rem;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.1em">
+        Modèle physique — équilibre traînée aéro · résistance roulement · gravité
+      </p>
+      <div class="form-grid">
+        <div class="form-field"><label>Puissance cible (W)</label><input type="number" id="predPower" step="1" min="50" max="600"><div class="hint">en moyenne soutenue</div></div>
+        <div class="form-field"><label>Poids cycliste (kg)</label><input type="number" id="predRiderW" step="0.1" min="30" max="150"></div>
+        <div class="form-field"><label>Poids vélo (kg)</label><input type="number" id="predBikeW" step="0.1" min="3" max="20"></div>
+        <div class="form-field"><label>CdA (m²)</label><input type="number" id="predCda" step="0.005" min="0.15" max="0.6"><div class="hint">TT/aero ~0.25 · route ~0.32</div></div>
+        <div class="form-field"><label>Crr</label><input type="number" id="predCrr" step="0.0005" min="0.002" max="0.012"><div class="hint">pneus race ~0.004 · entraînement ~0.006</div></div>
+        <div class="form-field"><label>Rendement transmission</label><input type="number" id="predEff" step="0.005" min="0.9" max="1"></div>
+        <div class="form-field"><label>Densité air ρ (kg/m³)</label><input type="number" id="predRho" step="0.005" min="0.9" max="1.4"><div class="hint">15 °C, 200 m ≈ 1.20</div></div>
+        <div class="form-field"><label>Vent (km/h)</label><input type="number" id="predWind" step="1" min="-40" max="40"><div class="hint">+ = face · − = arrière</div></div>
+      </div>
+      <div id="predResults"></div>
+    </div>
+  `;
+  // Tab switching
+  main.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+  // Prediction form: load saved values, attach handlers
+  const fields = ["predPower","predRiderW","predBikeW","predCda","predCrr","predEff","predRho","predWind"];
+  const defaults = { predPower: 240, predRiderW: 75, predBikeW: 8, predCda: 0.28, predCrr: 0.005, predEff: 0.975, predRho: 1.20, predWind: 0 };
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    el.value = localStorage.getItem("gpx_" + id) ?? defaults[id];
+    el.addEventListener("input", () => {
+      localStorage.setItem("gpx_" + id, el.value);
+      clearTimeout(predTimer);
+      predTimer = setTimeout(() => currentData && renderPrediction(currentData), 150);
+    });
+  });
+}
+
+let predTimer;
+
+function switchTab(name) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.toggle("active", c.id === "tab-" + name));
+  if (name === "analyse" && map) setTimeout(() => map.invalidateSize(), 50);
+}
+
+function getPredParams() {
+  return {
+    power:        parseFloat(document.getElementById("predPower").value)  || 240,
+    riderWeight:  parseFloat(document.getElementById("predRiderW").value) || 75,
+    bikeWeight:   parseFloat(document.getElementById("predBikeW").value)  || 8,
+    cda:          parseFloat(document.getElementById("predCda").value)    || 0.28,
+    crr:          parseFloat(document.getElementById("predCrr").value)    || 0.005,
+    efficiency:   parseFloat(document.getElementById("predEff").value)    || 0.975,
+    rho:          parseFloat(document.getElementById("predRho").value)    || 1.20,
+    wind:         parseFloat(document.getElementById("predWind").value)   || 0,
+  };
+}
+
+function renderPrediction(data) {
+  ensureLayout();
+  const params = getPredParams();
+  const result = predictRace(data.points, params);
+  const actual = result.actualTotal;
+  const diff = actual ? result.totalTime - actual : null;
+  const diffClass = diff == null ? "" : (diff < 0 ? "faster" : "slower");
+  const diffStr = diff == null ? "" : (diff < 0 ? "−" : "+") + fmtDuration(Math.abs(diff));
+
+  // Sensitivity analysis
+  const variations = [
+    { label: "Puissance +10 W",  params: { ...params, power: params.power + 10 } },
+    { label: "Puissance −10 W",  params: { ...params, power: params.power - 10 } },
+    { label: "Puissance +20 W",  params: { ...params, power: params.power + 20 } },
+    { label: "CdA −0.01 (plus aéro)", params: { ...params, cda: params.cda - 0.01 } },
+    { label: "CdA +0.01 (moins aéro)", params: { ...params, cda: params.cda + 0.01 } },
+    { label: "Crr −0.001 (pneus rapides)", params: { ...params, crr: Math.max(0.001, params.crr - 0.001) } },
+    { label: "Vent +5 km/h face", params: { ...params, wind: params.wind + 5 } },
+    { label: "Vent +5 km/h arrière", params: { ...params, wind: params.wind - 5 } },
+    { label: "Poids −2 kg",       params: { ...params, riderWeight: params.riderWeight - 2 } },
+  ].map(v => {
+    const r = predictRace(data.points, v.params);
+    const d = r.totalTime - result.totalTime;
+    return { label: v.label, time: r.totalTime, delta: d };
+  });
+
+  document.getElementById("predResults").innerHTML = `
+    <div class="pred-summary">
+      <div class="stat"><div class="label">Temps prédit</div><div class="value">${fmtDuration(result.totalTime)}</div>${diff != null ? `<div class="delta ${diffClass}">${diffStr} vs réel</div>` : ""}</div>
+      <div class="stat"><div class="label">Vitesse moy. prédite</div><div class="value">${result.avgSpeed.toFixed(1)}<span class="unit">km/h</span></div></div>
+      <div class="stat"><div class="label">Distance</div><div class="value">${(result.totalDist/1000).toFixed(2)}<span class="unit">km</span></div></div>
+      ${actual ? `<div class="stat"><div class="label">Temps réel (GPX)</div><div class="value">${fmtDuration(actual)}</div></div>` : ""}
+      <div class="stat"><div class="label">Masse totale</div><div class="value">${(params.riderWeight + params.bikeWeight).toFixed(1)}<span class="unit">kg</span></div></div>
+      <div class="stat"><div class="label">Énergie estimée</div><div class="value">${Math.round(params.power * params.efficiency * result.totalTime / 1000)}<span class="unit">kJ</span></div></div>
+    </div>
+
+    <div class="chart-card" style="margin-bottom:1rem">
+      <h2>Vitesse prédite vs réelle (km vs km/h)</h2>
+      <div class="chart-wrap" style="height:280px"><canvas id="predChart"></canvas></div>
+    </div>
+
+    <div class="zones-card">
+      <h2>Sensibilité (impact sur le temps total)</h2>
+      <table class="sens-table">
+        <thead><tr><th>Variation</th><th>Temps</th><th>Δ vs base</th></tr></thead>
+        <tbody>
+          ${variations.map(v => {
+            const sign = v.delta < 0 ? "−" : "+";
+            const cls = v.delta < 0 ? "neg" : "pos";
+            return `<tr><td>${v.label}</td><td>${fmtDuration(v.time)}</td><td class="${cls}">${sign}${fmtDuration(Math.abs(v.delta))}</td></tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // Build chart
+  if (charts.pred) charts.pred.destroy();
+  const labels = result.series.map(p => p.dist.toFixed(2));
+  charts.pred = new Chart(document.getElementById("predChart"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        { label: "Prédite", data: result.series.map(p => p.predSpeed), borderColor: "#f5d278", backgroundColor: "rgba(245,210,120,0.15)", fill: false, tension: 0.2, borderWidth: 2, pointRadius: 0 },
+        { label: "Réelle",  data: result.series.map(p => p.actualSpeed), borderColor: "#c8b074", backgroundColor: "rgba(200,176,116,0.12)", fill: false, tension: 0.2, borderWidth: 2, pointRadius: 0, borderDash: [4, 3] },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: "#d4c79e", font: { family: "Share Tech Mono" } } }, tooltip: { mode: "index", intersect: false } },
+      interaction: { mode: "nearest", axis: "x", intersect: false },
+      scales: {
+        x: { ticks: { color: "#8a7e5d", maxTicksLimit: 10 }, grid: { color: "#2a2114" }, title: { display: true, text: "km", color: "#8a7e5d" } },
+        y: { ticks: { color: "#8a7e5d" }, grid: { color: "#2a2114" }, title: { display: true, text: "km/h", color: "#8a7e5d" } },
+      },
+    },
+  });
+}
+
+function render(data) {
+  ensureLayout();
+  renderAnalyse(data);
+  renderPrediction(data);
+}
+
+function renderAnalyse(data) {
+  document.getElementById("trackName").textContent = "— " + data.name;
+  const tab = document.getElementById("tab-analyse");
+  const s = data.stats;
+  const ftp = getFTP();
+  const weight = getWeight();
+
+  const startStr = s.startTime ? s.startTime.toLocaleString("fr-CA") : "—";
+
+  // Power-derived metrics that depend on FTP/weight
+  const intensityFactor = (s.normalizedPower && ftp) ? s.normalizedPower / ftp : null;
+  const tss = (s.normalizedPower && ftp && s.duration)
+    ? (s.duration * s.normalizedPower * intensityFactor) / (ftp * 3600) * 100
+    : null;
+  const zones = s.hasPower ? computePowerZones(data.points, ftp) : null;
+  const mmp = s.hasPower ? computeMMP(data.points, MMP_DURATIONS) : null;
+  const totalZoneSec = zones ? zones.reduce((a,z) => a + z.seconds, 0) : 0;
+  const wkgAvg = (weight && s.avgPowerMoving) ? s.avgPowerMoving / weight : null;
+  const wkgNP  = (weight && s.normalizedPower) ? s.normalizedPower / weight : null;
+  const wkgMax = (weight && s.maxPower) ? s.maxPower / weight : null;
+  const kJperKm = (s.totalKJ && s.distance) ? s.totalKJ / s.distance : null;
+  const calories = s.totalKJ ? s.totalKJ / 0.24 : null; // ~24% efficiency assumption
+
+  tab.innerHTML = `
+    <div class="stats">
+      <div class="stat"><div class="label">Distance</div><div class="value">${s.distance.toFixed(2)}<span class="unit">km</span></div></div>
+      <div class="stat"><div class="label">Durée</div><div class="value">${fmtDuration(s.duration)}</div></div>
+      <div class="stat"><div class="label">Vitesse moy.</div><div class="value">${s.avgSpeed.toFixed(1)}<span class="unit">km/h</span></div></div>
+      <div class="stat"><div class="label">Vitesse max.</div><div class="value">${s.maxSpeed.toFixed(1)}<span class="unit">km/h</span></div></div>
+      <div class="stat"><div class="label">Dénivelé +</div><div class="value">${Math.round(s.elevGain)}<span class="unit">m</span></div></div>
+      <div class="stat"><div class="label">Dénivelé −</div><div class="value">${Math.round(s.elevLoss)}<span class="unit">m</span></div></div>
+      <div class="stat"><div class="label">Altitude min/max</div><div class="value">${Math.round(s.minEle ?? 0)} / ${Math.round(s.maxEle ?? 0)}<span class="unit">m</span></div></div>
+      ${s.avgCad != null ? `<div class="stat"><div class="label">Cadence moy.</div><div class="value">${s.avgCad.toFixed(0)}<span class="unit">rpm</span></div></div>` : ""}
+      ${s.avgTemp != null ? `<div class="stat"><div class="label">Température</div><div class="value">${s.avgTemp.toFixed(1)}<span class="unit">°C</span></div></div>` : ""}
+      <div class="stat"><div class="label">Début</div><div class="value" style="font-size:0.95rem">${startStr}</div></div>
+      <div class="stat"><div class="label">Points</div><div class="value">${s.pointCount}</div></div>
+    </div>
+
+    ${s.hasPower ? `
+    <div class="section-title">Puissance — FTP ${ftp} W${weight ? ` · ${weight} kg` : ""}</div>
+    <div class="stats">
+      <div class="stat"><div class="label">Puissance moy.</div><div class="value">${s.avgPower.toFixed(0)}<span class="unit">W</span></div></div>
+      <div class="stat"><div class="label">Puiss. moy. (en mvt)</div><div class="value">${s.avgPowerMoving.toFixed(0)}<span class="unit">W</span></div></div>
+      <div class="stat"><div class="label">Puissance max.</div><div class="value">${s.maxPower.toFixed(0)}<span class="unit">W</span></div></div>
+      ${s.normalizedPower != null ? `<div class="stat"><div class="label">Normalized Power</div><div class="value">${s.normalizedPower.toFixed(0)}<span class="unit">W</span></div></div>` : ""}
+      ${s.variabilityIndex != null ? `<div class="stat"><div class="label">Variability Index</div><div class="value">${s.variabilityIndex.toFixed(2)}</div></div>` : ""}
+      ${intensityFactor != null ? `<div class="stat"><div class="label">Intensity Factor</div><div class="value">${intensityFactor.toFixed(2)}</div></div>` : ""}
+      ${tss != null ? `<div class="stat"><div class="label">TSS</div><div class="value">${tss.toFixed(0)}</div></div>` : ""}
+      ${s.totalKJ ? `<div class="stat"><div class="label">Travail total</div><div class="value">${Math.round(s.totalKJ)}<span class="unit">kJ</span></div></div>` : ""}
+      ${calories ? `<div class="stat"><div class="label">Calories ~</div><div class="value">${Math.round(calories)}<span class="unit">kcal</span></div></div>` : ""}
+      ${kJperKm ? `<div class="stat"><div class="label">kJ / km</div><div class="value">${kJperKm.toFixed(1)}</div></div>` : ""}
+      ${wkgAvg ? `<div class="stat"><div class="label">W/kg moy.</div><div class="value">${wkgAvg.toFixed(2)}</div></div>` : ""}
+      ${wkgNP ? `<div class="stat"><div class="label">W/kg NP</div><div class="value">${wkgNP.toFixed(2)}</div></div>` : ""}
+      ${wkgMax ? `<div class="stat"><div class="label">W/kg max</div><div class="value">${wkgMax.toFixed(2)}</div></div>` : ""}
+    </div>
+
+    <div class="power-detail">
+      <div class="zones-card">
+        <h2>Temps en zones (Coggan)</h2>
+        <div class="zone-bar">${zones.map(z => totalZoneSec ? `<span style="width:${(z.seconds/totalZoneSec*100).toFixed(2)}%;background:${z.color}" title="${z.name}: ${fmtDuration(z.seconds)}"></span>` : "").join("")}</div>
+        <table class="zone-table">
+          <thead><tr><th>Zone</th><th>Plage (W)</th><th>Temps</th><th>%</th></tr></thead>
+          <tbody>
+            ${zones.map(z => `
+              <tr>
+                <td><span class="zone-swatch" style="background:${z.color}"></span>${z.name}</td>
+                <td>${Math.round(z.lowW)}${z.highW === Infinity ? "+" : "–" + Math.round(z.highW)}</td>
+                <td>${fmtDuration(z.seconds)}</td>
+                <td>${totalZoneSec ? (z.seconds/totalZoneSec*100).toFixed(1) : "0"}%</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="zones-card">
+        <h2>Mean Maximal Power (pics)</h2>
+        <table class="mmp-table">
+          <thead><tr><th>Durée</th><th>Watts</th><th>% FTP</th>${weight ? "<th>W/kg</th>" : ""}</tr></thead>
+          <tbody>
+            ${mmp.map(m => m.watts == null ? "" : `
+              <tr>
+                <td>${fmtMMPDuration(m.duration)}</td>
+                <td>${m.watts.toFixed(0)}</td>
+                <td>${(m.watts/ftp*100).toFixed(0)}%</td>
+                ${weight ? `<td>${(m.watts/weight).toFixed(2)}</td>` : ""}
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    ` : ""}
+
+    <div class="map-controls">
+      <label>Coloration : <select id="colorMode"></select></label>
+      <label>Fond : <select id="tileMode"></select></label>
+    </div>
+    <div id="map"></div>
+    <div id="mapLegend"></div>
+    <div id="hoverInfo" class="hover-info"><span class="hover-empty">Survole la carte pour voir les détails au point survolé.</span></div>
+    <div class="charts">
+      <div class="chart-card"><h2>Profil d'élévation (m vs km)</h2><div class="chart-wrap"><canvas id="eleChart"></canvas></div></div>
+      <div class="chart-card"><h2>Vitesse (km/h vs km)</h2><div class="chart-wrap"><canvas id="spdChart"></canvas></div></div>
+      ${s.hasPower ? `<div class="chart-card"><h2>Puissance (W vs km) — moy. mobile 30 s</h2><div class="chart-wrap"><canvas id="pwrChart"></canvas></div></div>` : ""}
+      ${s.avgCad != null ? `<div class="chart-card"><h2>Cadence (rpm vs km)</h2><div class="chart-wrap"><canvas id="cadChart"></canvas></div></div>` : ""}
+      ${s.avgTemp != null ? `<div class="chart-card"><h2>Température (°C vs km)</h2><div class="chart-wrap"><canvas id="tempChart"></canvas></div></div>` : ""}
+    </div>
+  `;
+
+  // Populate map control selects + wire change handlers, then draw
+  const colorSel = document.getElementById("colorMode");
+  const tileSel = document.getElementById("tileMode");
+  const hasPower = data.stats.hasPower;
+  const hasCad = data.stats.avgCad != null;
+  colorSel.innerHTML = COLOR_MODES
+    .filter(m => !m.needs || (m.needs === "power" && hasPower) || (m.needs === "cadence" && hasCad))
+    .map(m => `<option value="${m.id}">${m.label}</option>`).join("");
+  tileSel.innerHTML = Object.entries(TILE_LAYERS).map(([id, t]) => `<option value="${id}">${t.name}</option>`).join("");
+  colorSel.value = localStorage.getItem("mapColorMode") || "speed";
+  tileSel.value = localStorage.getItem("mapTileMode") || "osm";
+  if (![...colorSel.options].some(o => o.value === colorSel.value)) colorSel.value = "none";
+  colorSel.addEventListener("change", () => { localStorage.setItem("mapColorMode", colorSel.value); drawMapView(data); });
+  tileSel.addEventListener("change", () => { localStorage.setItem("mapTileMode", tileSel.value); drawMapView(data); });
+  drawMapView(data);
+
+  const sampled = downsample(data.points);
+  const labels = sampled.map(p => (p.dist / 1000).toFixed(2));
+
+  Object.values(charts).forEach(c => c?.destroy());
+
+  const baseOpts = (yLabel) => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { mode: "index", intersect: false } },
+    interaction: { mode: "nearest", axis: "x", intersect: false },
+    scales: {
+      x: { ticks: { color: "#8a7e5d", maxTicksLimit: 8 }, grid: { color: "#2a2114" }, title: { display: true, text: "km", color: "#8a7e5d" } },
+      y: { ticks: { color: "#8a7e5d" }, grid: { color: "#2a2114" }, title: { display: true, text: yLabel, color: "#8a7e5d" } },
+    },
+    elements: { point: { radius: 0 }, line: { tension: 0.2, borderWidth: 2 } },
+  });
+
+  charts.ele = new Chart(document.getElementById("eleChart"), {
+    type: "line",
+    data: { labels, datasets: [{ data: sampled.map(p => p.ele), borderColor: "#d4a854", backgroundColor: "rgba(212,168,84,0.18)", fill: true }] },
+    options: baseOpts("m"),
+  });
+
+  charts.spd = new Chart(document.getElementById("spdChart"), {
+    type: "line",
+    data: { labels, datasets: [{ data: sampled.map(p => p.speed), borderColor: "#c8b074", backgroundColor: "rgba(200,176,116,0.15)", fill: true }] },
+    options: baseOpts("km/h"),
+  });
+
+  if (s.hasPower) {
+    // Smooth power with 30s moving average for readability
+    const smoothed = smoothByTime(data.points, "power", 30);
+    const sampledP = downsample(smoothed);
+    const labelsP = sampledP.map(p => (p.dist / 1000).toFixed(2));
+    charts.pwr = new Chart(document.getElementById("pwrChart"), {
+      type: "line",
+      data: { labels: labelsP, datasets: [{ data: sampledP.map(p => p.smoothed), borderColor: "#f5d278", backgroundColor: "rgba(245,210,120,0.18)", fill: true }] },
+      options: baseOpts("W"),
+    });
+  }
+  if (s.avgCad != null) {
+    charts.cad = new Chart(document.getElementById("cadChart"), {
+      type: "line",
+      data: { labels, datasets: [{ data: sampled.map(p => p.cad), borderColor: "#9c7c3a", backgroundColor: "rgba(156,124,58,0.15)", fill: true }] },
+      options: baseOpts("rpm"),
+    });
+  }
+  if (s.avgTemp != null) {
+    charts.temp = new Chart(document.getElementById("tempChart"), {
+      type: "line",
+      data: { labels, datasets: [{ data: sampled.map(p => p.temp), borderColor: "#e87a3c", backgroundColor: "rgba(232,122,60,0.15)", fill: true }] },
+      options: baseOpts("°C"),
+    });
+  }
+}
+
+function showError(msg) {
+  document.getElementById("main").innerHTML = `<div class="err">${msg}</div>
+    <div class="empty">Glissez-déposez un fichier .gpx ou utilisez le bouton ci-dessus.</div>`;
+}
+
+function renderCurrent() {
+  if (currentData) render(currentData);
+}
+
+async function loadFromUrl(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const txt = await res.text();
+    currentData = parseGPX(txt);
+    render(currentData);
+  } catch (e) {
+    showError(`Impossible de charger automatiquement le GPX (${e.message}). Servez le dossier via un serveur local (ex. <code>python3 -m http.server</code>) ou chargez manuellement.`);
+  }
+}
+
+async function loadFromFile(file) {
+  try {
+    const txt = await file.text();
+    currentData = parseGPX(txt);
+    render(currentData);
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+document.getElementById("fileInput").addEventListener("change", e => {
+  if (e.target.files[0]) loadFromFile(e.target.files[0]);
+});
+
+document.body.addEventListener("dragover", e => { e.preventDefault(); });
+document.body.addEventListener("drop", e => {
+  e.preventDefault();
+  if (e.dataTransfer.files[0]) loadFromFile(e.dataTransfer.files[0]);
+});
+
+// FTP/weight inputs: persist in localStorage and re-render on change
+const ftpInput = document.getElementById("ftpInput");
+const weightInput = document.getElementById("weightInput");
+ftpInput.value = localStorage.getItem("gpxFTP") ?? DEFAULT_FTP;
+weightInput.value = localStorage.getItem("gpxWeight") ?? "";
+let reRenderTimer;
+function onParamChange() {
+  localStorage.setItem("gpxFTP", ftpInput.value);
+  localStorage.setItem("gpxWeight", weightInput.value);
+  clearTimeout(reRenderTimer);
+  reRenderTimer = setTimeout(renderCurrent, 200);
+}
+ftpInput.addEventListener("input", onParamChange);
+weightInput.addEventListener("input", onParamChange);
+
+const defaultGpx = "Mont_tremblant_Ironman_70_3_2025_Vélo.gpx";
+loadFromUrl(encodeURIComponent(defaultGpx));
+</script>
+</body>
+</html>
